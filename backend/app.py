@@ -2,12 +2,22 @@
 Fantasy Golf League - Flask API (production-ready)
 """
 import os
+import decimal
 import functools
 from flask import Flask, jsonify, request, send_from_directory
 from database import get_db, init_db, USE_POSTGRES
 from sql_compat import upsert_picks, upsert_golfer_result, upsert_weekly_score
 
+class CustomJSONProvider(Flask.json_provider_class):
+    """Handle Decimal types from Postgres ROUND()."""
+    def default(self, o):
+        if isinstance(o, decimal.Decimal):
+            return float(o)
+        return super().default(o)
+
 app = Flask(__name__, static_folder='../frontend', static_url_path='')
+app.json_provider_class = CustomJSONProvider
+app.json = CustomJSONProvider(app)
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-change-me')
 
 ADMIN_KEY = os.environ.get('ADMIN_KEY', 'admin')
@@ -100,47 +110,50 @@ def api_set_pin():
 @app.route('/api/standings')
 def api_standings():
     db = get_db()
-    standings = db.execute('''
-        SELECT
-            p.id, p.name,
-            d.name as division, d.id as division_id,
-            c.name as conference,
-            ROUND(AVG(ws.final_score)::numeric, 1) as avg_score,
-            COUNT(ws.id) as weeks_played,
-            COALESCE(earnings.total, 0) as total_winnings
-        FROM players p
-        JOIN divisions d ON p.division_id = d.id
-        JOIN conferences c ON d.conference_id = c.id
-        LEFT JOIN weekly_scores ws ON ws.player_id = p.id
-        LEFT JOIN (
-            SELECT player_id, SUM(winnings) as total
-            FROM weekly_winners
-            GROUP BY player_id
-        ) earnings ON earnings.player_id = p.id
-        WHERE p.active = 1
-        GROUP BY p.id, p.name, d.name, d.id, c.name
-        ORDER BY c.name, d.name, avg_score ASC
-    ''').fetchall() if USE_POSTGRES else db.execute('''
-        SELECT
-            p.id, p.name,
-            d.name as division, d.id as division_id,
-            c.name as conference,
-            ROUND(AVG(ws.final_score), 1) as avg_score,
-            COUNT(ws.id) as weeks_played,
-            COALESCE(earnings.total, 0) as total_winnings
-        FROM players p
-        JOIN divisions d ON p.division_id = d.id
-        JOIN conferences c ON d.conference_id = c.id
-        LEFT JOIN weekly_scores ws ON ws.player_id = p.id
-        LEFT JOIN (
-            SELECT player_id, SUM(winnings) as total
-            FROM weekly_winners
-            GROUP BY player_id
-        ) earnings ON earnings.player_id = p.id
-        WHERE p.active = 1
-        GROUP BY p.id
-        ORDER BY c.name, d.name, avg_score ASC
-    ''').fetchall()
+    if USE_POSTGRES:
+        standings = db.execute('''
+            SELECT
+                p.id, p.name,
+                d.name as division, d.id as division_id,
+                c.name as conference,
+                ROUND(AVG(ws.final_score)::numeric, 1) as avg_score,
+                COUNT(ws.id) as weeks_played,
+                COALESCE(earnings.total, 0) as total_winnings
+            FROM players p
+            JOIN divisions d ON p.division_id = d.id
+            JOIN conferences c ON d.conference_id = c.id
+            LEFT JOIN weekly_scores ws ON ws.player_id = p.id
+            LEFT JOIN (
+                SELECT player_id, SUM(winnings) as total
+                FROM weekly_winners
+                GROUP BY player_id
+            ) earnings ON earnings.player_id = p.id
+            WHERE p.active = 1
+            GROUP BY p.id, p.name, d.name, d.id, c.name
+            ORDER BY c.name, d.name, avg_score ASC NULLS LAST
+        ''').fetchall()
+    else:
+        standings = db.execute('''
+            SELECT
+                p.id, p.name,
+                d.name as division, d.id as division_id,
+                c.name as conference,
+                ROUND(AVG(ws.final_score), 1) as avg_score,
+                COUNT(ws.id) as weeks_played,
+                COALESCE(earnings.total, 0) as total_winnings
+            FROM players p
+            JOIN divisions d ON p.division_id = d.id
+            JOIN conferences c ON d.conference_id = c.id
+            LEFT JOIN weekly_scores ws ON ws.player_id = p.id
+            LEFT JOIN (
+                SELECT player_id, SUM(winnings) as total
+                FROM weekly_winners
+                GROUP BY player_id
+            ) earnings ON earnings.player_id = p.id
+            WHERE p.active = 1
+            GROUP BY p.id
+            ORDER BY c.name, d.name, avg_score ASC
+        ''').fetchall()
     db.close()
 
     result = {}
