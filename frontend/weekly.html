@@ -51,13 +51,16 @@
     let tournaments = [];
     let weeksWithResults = [];
     let selectedWeek = null;
+    let allDivisions = [];
 
     async function loadWeeklyData() {
       try {
-        const [tourneys, weeks] = await Promise.all([
+        const [tourneys, weeks, divisions] = await Promise.all([
           apiFetch('/api/tournaments'),
-          apiFetch('/api/weekly')
+          apiFetch('/api/weekly'),
+          apiFetch('/api/divisions')
         ]);
+        allDivisions = divisions;
 
         tournaments = tourneys;
         weeksWithResults = weeks.map(w => w.week_number);
@@ -144,6 +147,17 @@
           `;
         }
         html += '</div>';
+
+        // Add links to division detail pages
+        html += '<div style="margin-top: 1.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">';
+        html += '<span style="font-size: 0.85rem; color: var(--gray-500); font-weight: 500;">View all picks:</span>';
+        if (allDivisions.length > 0) {
+          for (const d of allDivisions) {
+            html += `<a href="/division.html?id=${d.id}" style="padding: 0.35rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 500; background: var(--gray-100); color: var(--gray-700); text-decoration: none;">${d.name}</a>`;
+          }
+        }
+        html += '</div>';
+
         container.innerHTML = html;
       } catch (err) {
         container.innerHTML = '<div class="no-results">No results yet for this week.</div>';

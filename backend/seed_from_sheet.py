@@ -366,10 +366,20 @@ def seed_avg_scores(db):
     print(f"Seeded average scores for {count} players across {len(tournaments)} tournaments.")
 
 
+def clear_all(db):
+    """Clear all data for a clean re-seed."""
+    for table in ['weekly_winners', 'weekly_scores', 'picks', 'golfer_results',
+                   'settings', 'tournaments', 'players', 'divisions', 'conferences']:
+        db.execute(f'DELETE FROM {table}')
+    db.commit()
+    print("Cleared all existing data.")
+
+
 def main():
     init_db()
     db = get_db()
     try:
+        clear_all(db)
         seed_conferences_and_divisions(db)
         seed_tournaments(db)
         seed_players_from_leaderboard(db)
