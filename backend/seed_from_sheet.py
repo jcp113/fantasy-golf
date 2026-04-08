@@ -159,6 +159,160 @@ def seed_weekly_winners(db):
     print(f"Seeded {count} weekly winner records.")
 
 
+def seed_player_emails(db):
+    """Set player emails from the division sheets (known mapping)."""
+    EMAIL_MAP = {
+        'Beacon Hill': {
+            'Justin Verhasselt': 'Jverhasselt@gmail.com',
+            'Scott Kilpatrick': 'Scott.m.Kilpatrick24@gmail.com',
+            'John Vaccaro': 'johnrvaccaro@gmail.com',
+            'Richie Bohny': 'richard.bohny@gmail.com',
+            'Kyle Lebrecht': 'Lebrecht.k@gmail.com',
+            'John Hoy': 'johnhoy89@gmail.com',
+            'Tim Faranda': 'timfaranda7@gmail.com',
+            'Pete Quinn': 'quinnpeter8@gmail.com',
+            'Casey Verst': 'cverst@gmail.com',
+            'Mike Pirozzi': 'Mapirozzi9@gmail.com',
+            'John McGraner': 'johnmcgraner@gmail.com',
+            'Joe Morelli': 'jpmorelli11@gmail.com',
+            'Sean Williamson': 'seanwilliamson926@gmail.com',
+            'Andrew Nathanson': 'andrewocm@gmail.com',
+            'Jared Nathanson': 'jw.nathanson@gmail.com',
+            'Chris Preuster': 'Preuster1@yahoo.com',
+        },
+        'Manasquan River': {
+            'Mike Guarnieri': 'guarnieri67@gmail.com',
+            'Greg Campanile': 'gregorycampanile@gmail.com',
+            'Kevin Cooney': 'cooneynj@gmail.com',
+            'Brian Dudzinski': 'Bdudzinski30@gmail.com',
+            'Mike Wask': 'michael.waskiewicz89@gmail.com',
+            'Mike Brunner': 'michaeljbrunner@gmail.com',
+            'James Curcio': 'jamescurcio13@gmail.com',
+            'Spencer Van Wagoner': 'scvanwagoner@gmail.com',
+            'Charlie Tacopino': 'tacopinocharles5@gmail.com',
+            'Kevin Dudzinski': 'kevindudzinski@gmail.com',
+            'Marc Johnson': 'marcej51881012@gmail.com',
+            'Pete O\'Hagan': 'peteohagan77@gmail.com',
+            'Jimmy Boytano': 'jboytano@gmail.com',
+            'Pat McGuinness': 'pat.mcguinness91@gmail.com',
+            'Kevin Bohny': 'kevinbohny@gmail.com',
+            'Greg Marcy': 'gregory.t.marcy@gmail.com',
+        },
+        'Metedeconk': {
+            'Brian Desena': 'brian.desena@gmail.com',
+            'Danny Orr': 'daniel.orr@placeexchange.com',
+            'Colin Marshall': 'colin.marshall7@gmail.com',
+            'Matt Sharkey': 'mpsharkey@gmail.com',
+            'Patrick Moriarty': 'moriartypatrick9@gmail.com',
+            'Matt Ubriaco': 'matthew.ubriaco@gmail.com',
+            'Michael Curtis': 'michael.eugene.curtis@gmail.com',
+            'Al Desanctis': 'alex.desanctis3@gmail.com',
+            'Mike Arnott': 'mkarnott@gmail.com',
+            'Matt Therrien': 'therrien.m.s@gmail.com',
+            'Connor Ostrowski': 'connorostrowski1@gmail.com',
+            'Chris Lancos': 'chris.lancos@gmail.com',
+            'Cody Smith': 'codycameronsmith@gmail.com',
+            'Neal Cimino': 'njc1483@gmail.com',
+            'Kevin Brewster': 'kcb280@gmail.com',
+            'Mike Boytano': 'maboytano@gmail.com',
+        },
+        'Pine Barrens': {
+            'Vin Citro': 'vincitro@gmail.com',
+            'Tommy Brunner': 'tkbrunner@gmail.com',
+            'Chris Falvo': 'cfalvo01@gmail.com',
+            'Kris Basmagy': 'bazmaygee@gmail.com',
+            'Kiley Kmiec': 'kileykmiec@gmail.com',
+            'Tim Rhatigan': 'rhatigan_tim@yahoo.com',
+            'Brian Malloy': 'bmalloy214@gmail.com',
+            'Steve Troup': 'stevenrtroup@gmail.com',
+            'Ian Rappaport': 'ian@bigoutdoor.com',
+            'Steve Angelovich': 'sjangelovich@gmail.com',
+            'CJ Arnedo': 'carnedo@gmail.com',
+            'Adam Popkin': 'apopkin@gmail.com',
+            'Ryan Harkins': 'ryanharkins323@gmail.com',
+            'Phillipe Hebert': 'cookedphil@gmail.com',
+            'Ken Rothman': 'kenneth.rothman92@gmail.com',
+            'Chris Jordan': 'christophermichaeljordan@gmail.com',
+        },
+    }
+
+    # Also track alternate emails seen in pick data
+    ALT_EMAILS = {
+        'marcej101219@gmail.com': 'marcej51881012@gmail.com',  # Marc Johnson alt
+    }
+
+    count = 0
+    for div_name, players in EMAIL_MAP.items():
+        div = db.execute('SELECT id FROM divisions WHERE name = ?', (div_name,)).fetchone()
+        if not div:
+            continue
+        for player_name, email in players.items():
+            db.execute('UPDATE players SET email = ? WHERE name = ? AND division_id = ?',
+                       (email.lower(), player_name, div['id']))
+            count += 1
+    db.commit()
+    print(f"Set emails for {count} players.")
+    return ALT_EMAILS
+
+
+def seed_picks(db, alt_emails=None):
+    """Import all historical pick data from the Pick Data sheet."""
+    rows = fetch_sheet_csv('Pick Data')
+    if not rows:
+        print("No pick data found.")
+        return
+
+    alt_emails = alt_emails or {}
+    from sql_compat import upsert_picks
+
+    count = 0
+    skipped = 0
+
+    for row in rows[1:]:
+        if not row or len(row) < 9:
+            continue
+
+        email = (row[1] or '').strip().lower()
+        week_str = (row[2] or '').strip()
+        pick1 = (row[3] or '').strip()
+        pick2 = (row[4] or '').strip()
+        pick3 = (row[5] or '').strip()
+        pick4 = (row[6] or '').strip()
+        alternate = (row[7] or '').strip()
+        division = (row[8] or '').strip()
+
+        if not week_str or 'test' in week_str.lower() or not pick1:
+            continue
+
+        try:
+            week_num = int(week_str.replace('Week ', '').strip())
+        except ValueError:
+            continue
+
+        tourney = db.execute('SELECT id FROM tournaments WHERE week_number = ?', (week_num,)).fetchone()
+        if not tourney:
+            skipped += 1
+            continue
+
+        # Resolve alternate emails
+        if email in alt_emails:
+            email = alt_emails[email]
+
+        # Find player by email
+        player = db.execute('SELECT id FROM players WHERE email = ?', (email,)).fetchone()
+        if not player:
+            skipped += 1
+            continue
+
+        db.execute(upsert_picks(), (
+            player['id'], tourney['id'], pick1, pick2, pick3, pick4, alternate
+        ))
+        count += 1
+
+    db.commit()
+    print(f"Seeded {count} pick records ({skipped} skipped).")
+
+
 def seed_avg_scores(db):
     """Backfill season average scores from the leaderboard."""
     rows = fetch_sheet_csv('Leaderboard')
@@ -220,6 +374,8 @@ def main():
         seed_tournaments(db)
         seed_players_from_leaderboard(db)
         seed_weekly_winners(db)
+        alt_emails = seed_player_emails(db)
+        seed_picks(db, alt_emails)
         seed_avg_scores(db)
         print("\nDone! Database seeded from Google Sheet.")
     finally:
