@@ -118,7 +118,7 @@ def api_standings():
                 c.name as conference,
                 ROUND(AVG(ws.final_score)::numeric, 1) as avg_score,
                 COUNT(ws.id) as weeks_played,
-                COALESCE(earnings.total, 0) as total_winnings
+                COALESCE(MAX(earnings.total), 0) as total_winnings
             FROM players p
             JOIN divisions d ON p.division_id = d.id
             JOIN conferences c ON d.conference_id = c.id
