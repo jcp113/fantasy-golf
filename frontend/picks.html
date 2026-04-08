@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jersey Shore Fantasy Golf - Pick Your Team</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .pick-form {
+      background: var(--white);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 2rem;
+    }
+    .form-group {
+      margin-bottom: 1.5rem;
+    }
+    .form-group label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.4rem;
+      font-size: 0.9rem;
+      color: var(--gray-700);
+    }
+    .form-group select,
+    .form-group input {
+      width: 100%;
+      padding: 0.6rem 0.75rem;
+      border: 1px solid var(--gray-300);
+      border-radius: var(--radius);
+      font-size: 0.95rem;
+      background: var(--white);
+    }
+    .form-group select:focus,
+    .form-group input:focus {
+      outline: none;
+      border-color: var(--green-600);
+      box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15);
+    }
+    .form-group .hint {
+      font-size: 0.8rem;
+      color: var(--gray-500);
+      margin-top: 0.25rem;
+    }
+    .golfer-search {
+      position: relative;
+    }
+    .golfer-search input {
+      width: 100%;
+    }
+    .golfer-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      max-height: 200px;
+      overflow-y: auto;
+      background: var(--white);
+      border: 1px solid var(--gray-300);
+      border-radius: 0 0 var(--radius) var(--radius);
+      box-shadow: var(--shadow-md);
+      z-index: 10;
+      display: none;
+    }
+    .golfer-dropdown.open {
+      display: block;
+    }
+    .golfer-option {
+      padding: 0.5rem 0.75rem;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+    .golfer-option:hover,
+    .golfer-option.highlighted {
+      background: var(--green-50);
+      color: var(--green-800);
+    }
+    .submit-btn {
+      background: var(--green-700);
+      color: var(--white);
+      border: none;
+      padding: 0.75rem 2rem;
+      border-radius: var(--radius);
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+      width: 100%;
+    }
+    .submit-btn:hover {
+      background: var(--green-800);
+    }
+    .submit-btn:disabled {
+      background: var(--gray-300);
+      cursor: not-allowed;
+    }
+    .form-message {
+      padding: 1rem;
+      border-radius: var(--radius);
+      margin-top: 1rem;
+      font-size: 0.95rem;
+    }
+    .form-message.success {
+      background: var(--green-100);
+      color: var(--green-800);
+    }
+    .form-message.error {
+      background: #fef2f2;
+      color: #dc2626;
+    }
+    .major-warning {
+      background: var(--gold-light);
+      border: 1px solid #fde68a;
+      border-radius: var(--radius);
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      color: var(--gray-700);
+      margin-bottom: 1.5rem;
+    }
+    .golfer-option.blocked {
+      opacity: 0.45;
+      cursor: not-allowed;
+      text-decoration: line-through;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="header-top">
+        <div class="logo">Jersey Shore <span>Fantasy Golf</span></div>
+        <div class="season-badge">2026 Season</div>
+      </div>
+      <nav>
+        <a href="/">Season Standings</a>
+        <a href="/weekly.html">Weekly Results</a>
+        <a href="/picks.html" class="active">Pick Your Team</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="picks-container">
+      <h1 class="page-title">Pick Your Team</h1>
+      <p class="page-subtitle">Submit your weekly golfer picks</p>
+
+      <div id="current-tourney"></div>
+
+      <div class="picks-info">
+        <h3>How It Works</h3>
+        <ul>
+          <li>Select 4 golfers plus 1 alternate each week</li>
+          <li>Picks are due before the 1st tee time of the 1st round</li>
+          <li>Score = average finishing position of your 4 golfers (lowest wins)</li>
+          <li>Bonus points deducted if you pick the tournament winner</li>
+          <li>Cannot repeat golfers in major tournaments</li>
+          <li>5 or more missed picks = disqualified from playoffs and year-end payouts</li>
+        </ul>
+      </div>
+
+      <div id="major-warning" class="major-warning" style="display: none;">
+        This is a <strong>major tournament</strong> — you cannot reuse golfers from previous majors.
+      </div>
+
+      <div class="pick-form">
+        <form id="picks-form" onsubmit="submitPicks(event)">
+          <div class="form-group">
+            <label for="player-search">Your Name</label>
+            <div class="golfer-search">
+              <input type="text" id="player-search" placeholder="Start typing your name..." autocomplete="off" required>
+              <input type="hidden" id="player-select" value="">
+              <div class="golfer-dropdown" id="player-dropdown"></div>
+            </div>
+          </div>
+
+          <div class="form-group" id="pin-group">
+            <label for="pin-input">PIN</label>
+            <input type="password" id="pin-input" placeholder="Enter your 4-digit PIN" maxlength="8" inputmode="numeric" required>
+            <div class="hint" id="pin-hint">
+              First time? <a href="#" id="set-pin-link" onclick="showSetPinFlow(event)">Create your PIN</a>
+            </div>
+          </div>
+
+          <div id="set-pin-section" style="display:none; margin-bottom: 1.5rem;">
+            <div class="pick-form" style="background: var(--green-50); border: 1px solid var(--green-200, #bbf7d0);">
+              <p style="font-weight: 600; margin-bottom: 0.75rem; font-size: 0.95rem;">Create Your PIN</p>
+              <p style="font-size: 0.85rem; color: var(--gray-500); margin-bottom: 1rem;">Choose a PIN (at least 4 digits) to secure your picks. You'll use this each time you submit.</p>
+              <div class="form-group">
+                <input type="password" id="new-pin" placeholder="Choose a PIN (4+ digits)" maxlength="8" inputmode="numeric">
+              </div>
+              <div class="form-group" style="margin-bottom: 0.5rem;">
+                <input type="password" id="confirm-pin" placeholder="Confirm PIN" maxlength="8" inputmode="numeric">
+              </div>
+              <button type="button" class="submit-btn" style="margin-bottom: 0.5rem;" onclick="setPin()">Set PIN</button>
+              <div id="set-pin-message"></div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="tournament-select">Tournament</label>
+            <select id="tournament-select" required>
+              <option value="">Loading tournaments...</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="pick1">Pick 1</label>
+            <div class="golfer-search">
+              <input type="text" id="pick1" placeholder="Search for a golfer..." autocomplete="off" required>
+              <div class="golfer-dropdown" id="pick1-dropdown"></div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="pick2">Pick 2</label>
+            <div class="golfer-search">
+              <input type="text" id="pick2" placeholder="Search for a golfer..." autocomplete="off" required>
+              <div class="golfer-dropdown" id="pick2-dropdown"></div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="pick3">Pick 3</label>
+            <div class="golfer-search">
+              <input type="text" id="pick3" placeholder="Search for a golfer..." autocomplete="off" required>
+              <div class="golfer-dropdown" id="pick3-dropdown"></div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="pick4">Pick 4</label>
+            <div class="golfer-search">
+              <input type="text" id="pick4" placeholder="Search for a golfer..." autocomplete="off" required>
+              <div class="golfer-dropdown" id="pick4-dropdown"></div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="alternate">Alternate Pick</label>
+            <div class="golfer-search">
+              <input type="text" id="alternate" placeholder="Search for a golfer..." autocomplete="off">
+              <div class="golfer-dropdown" id="alternate-dropdown"></div>
+            </div>
+            <div class="hint">Used if one of your picks withdraws before the tournament starts</div>
+          </div>
+
+          <button type="submit" class="submit-btn" id="submit-btn">Submit Picks</button>
+          <div id="form-message"></div>
+        </form>
+      </div>
+    </div>
+  </main>
+
+  <footer>2026 Jersey Shore Fantasy Golf League</footer>
+
+  <script src="js/app.js"></script>
+  <script>
+    let allGolfers = [];
+    let allPlayers = [];
+    let allTournaments = [];
+    let blockedGolfers = []; // golfers used in past majors (lowercased names)
+    let blockedDetails = []; // {golfer, tournament} for display
+
+    async function initPicksPage() {
+      try {
+        const [players, tournaments, golfers] = await Promise.all([
+          apiFetch('/api/players'),
+          apiFetch('/api/tournaments'),
+          apiFetch('/api/golfers')
+        ]);
+
+        allPlayers = players;
+        allTournaments = tournaments;
+        allGolfers = golfers;
+
+        populatePlayerDropdown();
+        populateTournamentDropdown();
+        setupGolferSearchFields();
+        showCurrentTournament();
+
+        // Listen for tournament change to refresh blocked golfers
+        document.getElementById('tournament-select').addEventListener('change', refreshBlockedGolfers);
+      } catch (err) {
+        console.error(err);
+        showError('form-message', 'Unable to load form data. Please try again.');
+      }
+    }
+
+    async function refreshBlockedGolfers() {
+      const playerId = document.getElementById('player-select').value;
+      const select = document.getElementById('tournament-select');
+      const opt = select.options[select.selectedIndex];
+      const isMajor = opt && opt.dataset.major === '1';
+
+      if (!playerId || !isMajor) {
+        blockedGolfers = [];
+        blockedDetails = [];
+        renderBlockedList();
+        return;
+      }
+
+      try {
+        const used = await apiFetch(`/api/picks/used-major-golfers/${playerId}`);
+        blockedDetails = used;
+        blockedGolfers = used.map(u => u.golfer.toLowerCase());
+        renderBlockedList();
+      } catch (err) {
+        blockedGolfers = [];
+        blockedDetails = [];
+      }
+    }
+
+    function renderBlockedList() {
+      const warningEl = document.getElementById('major-warning');
+      const select = document.getElementById('tournament-select');
+      const opt = select.options[select.selectedIndex];
+      const isMajor = opt && opt.dataset.major === '1';
+
+      if (!isMajor) {
+        warningEl.style.display = 'none';
+        return;
+      }
+
+      warningEl.style.display = 'block';
+      if (blockedDetails.length === 0) {
+        warningEl.innerHTML = 'This is a <strong>major tournament</strong> — you cannot reuse golfers from previous majors.';
+        return;
+      }
+
+      // Group by tournament
+      const byTourney = {};
+      for (const b of blockedDetails) {
+        if (!byTourney[b.tournament]) byTourney[b.tournament] = [];
+        byTourney[b.tournament].push(b.golfer);
+      }
+
+      let html = 'This is a <strong>major tournament</strong> — the following golfers are <strong>unavailable</strong> (used in prior majors):<br><ul style="margin: 0.5rem 0 0 1.25rem; padding: 0;">';
+      for (const [tourney, golfers] of Object.entries(byTourney)) {
+        html += `<li><strong>${tourney}:</strong> ${golfers.join(', ')}</li>`;
+      }
+      html += '</ul>';
+      warningEl.innerHTML = html;
+    }
+
+    function isGolferBlocked(name) {
+      return blockedGolfers.includes(name.toLowerCase());
+    }
+
+    function populatePlayerDropdown() {
+      const input = document.getElementById('player-search');
+      const hidden = document.getElementById('player-select');
+      const dropdown = document.getElementById('player-dropdown');
+      let highlightIdx = -1;
+
+      function renderMatches(query) {
+        highlightIdx = -1;
+        const q = query.toLowerCase().trim();
+        const matches = q.length === 0
+          ? allPlayers
+          : allPlayers.filter(p => p.name.toLowerCase().includes(q));
+
+        if (matches.length === 0) {
+          dropdown.innerHTML = '<div class="golfer-option" style="color:var(--gray-500);">No matches</div>';
+          dropdown.classList.add('open');
+          return;
+        }
+
+        // Group by division
+        const byDiv = {};
+        for (const p of matches) {
+          if (!byDiv[p.division]) byDiv[p.division] = [];
+          byDiv[p.division].push(p);
+        }
+
+        let html = '';
+        for (const [div, players] of Object.entries(byDiv)) {
+          html += `<div style="padding:0.35rem 0.75rem;font-size:0.75rem;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.05em;background:var(--gray-50);">${div}</div>`;
+          for (const p of players) {
+            html += `<div class="golfer-option" data-id="${p.id}" onclick="selectPlayer(${p.id}, '${p.name.replace(/'/g, "\\'")}')">${p.name}</div>`;
+          }
+        }
+        dropdown.innerHTML = html;
+        dropdown.classList.add('open');
+      }
+
+      input.addEventListener('input', () => renderMatches(input.value));
+      input.addEventListener('focus', () => renderMatches(input.value));
+      input.addEventListener('blur', () => {
+        setTimeout(() => dropdown.classList.remove('open'), 200);
+      });
+
+      input.addEventListener('keydown', (e) => {
+        const options = dropdown.querySelectorAll('.golfer-option[data-id]');
+        if (!dropdown.classList.contains('open') || options.length === 0) return;
+
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          highlightIdx = Math.min(highlightIdx + 1, options.length - 1);
+          options.forEach((o, i) => o.classList.toggle('highlighted', i === highlightIdx));
+          options[highlightIdx].scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          highlightIdx = Math.max(highlightIdx - 1, 0);
+          options.forEach((o, i) => o.classList.toggle('highlighted', i === highlightIdx));
+          options[highlightIdx].scrollIntoView({ block: 'nearest' });
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          if (highlightIdx >= 0 && options[highlightIdx]) {
+            const id = options[highlightIdx].dataset.id;
+            const name = options[highlightIdx].textContent;
+            selectPlayer(parseInt(id), name);
+          }
+        } else if (e.key === 'Escape') {
+          dropdown.classList.remove('open');
+        }
+      });
+    }
+
+    function selectPlayer(id, name) {
+      document.getElementById('player-search').value = name;
+      document.getElementById('player-select').value = id;
+      document.getElementById('player-dropdown').classList.remove('open');
+      refreshBlockedGolfers();
+
+      // Check if player has a PIN set
+      const player = allPlayers.find(p => p.id === id);
+      const hint = document.getElementById('pin-hint');
+      if (player && !player.has_pin) {
+        hint.innerHTML = 'You need to <a href="#" onclick="showSetPinFlow(event)">create a PIN</a> before submitting picks.';
+        hint.style.color = '#dc2626';
+      } else {
+        hint.innerHTML = 'Forgot your PIN? Contact your commissioner.';
+        hint.style.color = '';
+      }
+    }
+
+    function showSetPinFlow(e) {
+      e.preventDefault();
+      const playerId = document.getElementById('player-select').value;
+      if (!playerId) {
+        showFormMessage('Select your name first.', 'error');
+        return;
+      }
+      document.getElementById('set-pin-section').style.display = 'block';
+    }
+
+    async function setPin() {
+      const playerId = document.getElementById('player-select').value;
+      const newPin = document.getElementById('new-pin').value.trim();
+      const confirmPin = document.getElementById('confirm-pin').value.trim();
+      const msgEl = document.getElementById('set-pin-message');
+
+      if (!playerId) {
+        msgEl.className = 'form-message error';
+        msgEl.textContent = 'Select your name first.';
+        return;
+      }
+      if (newPin.length < 4 || !/^\d+$/.test(newPin)) {
+        msgEl.className = 'form-message error';
+        msgEl.textContent = 'PIN must be at least 4 digits.';
+        return;
+      }
+      if (newPin !== confirmPin) {
+        msgEl.className = 'form-message error';
+        msgEl.textContent = 'PINs do not match.';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/auth/set-pin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ player_id: parseInt(playerId), pin: newPin })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          msgEl.className = 'form-message success';
+          msgEl.textContent = 'PIN set! You can now submit your picks.';
+          document.getElementById('pin-input').value = newPin;
+          // Update local player data
+          const player = allPlayers.find(p => p.id === parseInt(playerId));
+          if (player) player.has_pin = 1;
+          document.getElementById('pin-hint').innerHTML = 'Forgot your PIN? Contact your commissioner.';
+          document.getElementById('pin-hint').style.color = '';
+          setTimeout(() => {
+            document.getElementById('set-pin-section').style.display = 'none';
+          }, 1500);
+        } else {
+          msgEl.className = 'form-message error';
+          msgEl.textContent = data.error || 'Failed to set PIN.';
+        }
+      } catch (err) {
+        msgEl.className = 'form-message error';
+        msgEl.textContent = 'Network error.';
+      }
+    }
+
+    function populateTournamentDropdown() {
+      const select = document.getElementById('tournament-select');
+      // Show upcoming/current tournaments first
+      const upcoming = allTournaments.filter(t => !t.completed);
+      const completed = allTournaments.filter(t => t.completed);
+
+      let html = '<option value="">Select tournament...</option>';
+      if (upcoming.length > 0) {
+        html += '<optgroup label="Upcoming">';
+        for (const t of upcoming) {
+          const major = t.is_major ? ' (MAJOR)' : '';
+          html += `<option value="${t.id}" data-major="${t.is_major}">
+            Week ${t.week_number}: ${t.name}${major}
+          </option>`;
+        }
+        html += '</optgroup>';
+      }
+
+      select.innerHTML = html;
+
+      // Auto-select first upcoming
+      if (upcoming.length > 0) {
+        select.value = upcoming[0].id;
+        checkMajorWarning();
+      }
+
+      select.addEventListener('change', checkMajorWarning);
+    }
+
+    function checkMajorWarning() {
+      refreshBlockedGolfers();
+    }
+
+    function showCurrentTournament() {
+      const upcoming = allTournaments.filter(t => !t.completed);
+      if (upcoming.length > 0) {
+        const t = upcoming[0];
+        const majorBadge = t.is_major ? '<span class="major-badge">Major</span>' : '';
+        document.getElementById('current-tourney').innerHTML = `
+          <div class="tournament-info" style="margin-bottom: 1.5rem;">
+            <div>
+              <div class="tournament-name">${t.name}${majorBadge}</div>
+              <div style="color: var(--gray-500); font-size: 0.9rem;">Week ${t.week_number}</div>
+            </div>
+            <div class="tournament-meta">
+              <span>${t.location || ''}</span>
+              <span>Starts ${t.start_date || ''}</span>
+            </div>
+          </div>
+        `;
+      }
+    }
+
+    function setupGolferSearchFields() {
+      const fields = ['pick1', 'pick2', 'pick3', 'pick4', 'alternate'];
+      for (const field of fields) {
+        const input = document.getElementById(field);
+        const dropdown = document.getElementById(`${field}-dropdown`);
+        let highlightIdx = -1;
+
+        input.addEventListener('input', () => {
+          const query = input.value.toLowerCase().trim();
+          highlightIdx = -1;
+          if (query.length < 2) {
+            dropdown.classList.remove('open');
+            return;
+          }
+          const matches = allGolfers.filter(g => g.toLowerCase().includes(query)).slice(0, 20);
+          if (matches.length === 0) {
+            dropdown.classList.remove('open');
+            return;
+          }
+          dropdown.innerHTML = matches.map((g, i) => {
+            const blocked = isGolferBlocked(g);
+            const cls = blocked ? 'golfer-option blocked' : 'golfer-option';
+            const onclick = blocked ? '' : `onclick="selectGolfer('${field}', '${g.replace(/'/g, "\\'")}')"`;
+            const label = blocked ? `${g} <span style="color:#dc2626;font-size:0.8em;">(used in major)</span>` : g;
+            return `<div class="${cls}" data-idx="${i}" data-blocked="${blocked}" ${onclick}>${label}</div>`;
+          }).join('');
+          dropdown.classList.add('open');
+        });
+
+        input.addEventListener('keydown', (e) => {
+          const options = dropdown.querySelectorAll('.golfer-option');
+          if (!dropdown.classList.contains('open') || options.length === 0) return;
+
+          if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            highlightIdx = Math.min(highlightIdx + 1, options.length - 1);
+            options.forEach((o, i) => o.classList.toggle('highlighted', i === highlightIdx));
+            options[highlightIdx].scrollIntoView({ block: 'nearest' });
+          } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            highlightIdx = Math.max(highlightIdx - 1, 0);
+            options.forEach((o, i) => o.classList.toggle('highlighted', i === highlightIdx));
+            options[highlightIdx].scrollIntoView({ block: 'nearest' });
+          } else if (e.key === 'Enter') {
+            e.preventDefault();
+            if (highlightIdx >= 0 && options[highlightIdx] && options[highlightIdx].dataset.blocked !== 'true') {
+              const name = options[highlightIdx].childNodes[0].textContent;
+              selectGolfer(field, name);
+            }
+          } else if (e.key === 'Escape') {
+            dropdown.classList.remove('open');
+          }
+        });
+
+        input.addEventListener('blur', () => {
+          setTimeout(() => dropdown.classList.remove('open'), 200);
+        });
+
+        input.addEventListener('focus', () => {
+          if (input.value.length >= 2) input.dispatchEvent(new Event('input'));
+        });
+      }
+    }
+
+    function selectGolfer(field, name) {
+      document.getElementById(field).value = name;
+      document.getElementById(`${field}-dropdown`).classList.remove('open');
+    }
+
+    async function submitPicks(e) {
+      e.preventDefault();
+
+      const playerId = document.getElementById('player-select').value;
+      const pin = document.getElementById('pin-input').value.trim();
+      const tournamentId = document.getElementById('tournament-select').value;
+      const pick1 = document.getElementById('pick1').value.trim();
+      const pick2 = document.getElementById('pick2').value.trim();
+      const pick3 = document.getElementById('pick3').value.trim();
+      const pick4 = document.getElementById('pick4').value.trim();
+      const alternate = document.getElementById('alternate').value.trim();
+
+      if (!playerId || !pin || !tournamentId || !pick1 || !pick2 || !pick3 || !pick4) {
+        showFormMessage('Please fill in all required fields, including your PIN.', 'error');
+        return;
+      }
+
+      // Check for duplicate picks
+      const picks = [pick1, pick2, pick3, pick4].map(p => p.toLowerCase());
+      const unique = new Set(picks);
+      if (unique.size < picks.length) {
+        showFormMessage('You cannot pick the same golfer twice.', 'error');
+        return;
+      }
+
+      // Check for blocked major golfers
+      const blockedPicks = picks.filter(p => blockedGolfers.includes(p));
+      if (blockedPicks.length > 0) {
+        showFormMessage(`Cannot use golfers already picked in a previous major: ${blockedPicks.join(', ')}`, 'error');
+        return;
+      }
+
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = true;
+      btn.textContent = 'Submitting...';
+
+      try {
+        const res = await fetch('/api/picks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            player_id: parseInt(playerId),
+            pin,
+            tournament_id: parseInt(tournamentId),
+            pick1, pick2, pick3, pick4, alternate
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok) {
+          showFormMessage('Picks submitted successfully!', 'success');
+        } else {
+          showFormMessage(data.error || 'Failed to submit picks.', 'error');
+        }
+      } catch (err) {
+        showFormMessage('Network error. Please try again.', 'error');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Submit Picks';
+      }
+    }
+
+    function showFormMessage(text, type) {
+      const el = document.getElementById('form-message');
+      el.className = `form-message ${type}`;
+      el.textContent = text;
+    }
+
+    initPicksPage();
+  </script>
+</body>
+</html>

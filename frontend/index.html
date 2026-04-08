@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jersey Shore Fantasy Golf - Season Standings</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="header-top">
+        <div class="logo">Jersey Shore <span>Fantasy Golf</span></div>
+        <div class="season-badge">2026 Season</div>
+      </div>
+      <nav>
+        <a href="/" class="active">Season Standings</a>
+        <a href="/weekly.html">Weekly Results</a>
+        <a href="/picks.html">Pick Your Team</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="page-title">Season Standings</h1>
+    <p class="page-subtitle">Cumulative scores and payouts across all divisions</p>
+
+    <div class="payouts-section">
+      <div class="payouts-grid">
+        <div class="payout-group">
+          <h3>Weekly Payouts</h3>
+          <div class="payout-item"><span>Non-Major Win</span><span class="amount">$100</span></div>
+          <div class="payout-item"><span>Major Win</span><span class="amount">$200</span></div>
+        </div>
+        <div class="payout-group">
+          <h3>Season Payouts</h3>
+          <div class="payout-item"><span>Champion</span><span class="amount">$2,000</span></div>
+          <div class="payout-item"><span>Runner Up</span><span class="amount">$700</span></div>
+        </div>
+        <div class="payout-group">
+          <h3>Additional Payouts</h3>
+          <div class="payout-item"><span>Division Winner</span><span class="amount">$150</span></div>
+          <div class="payout-item"><span>President's Trophy</span><span class="amount">$300</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="standings-container">
+      <div class="loading">
+        <div class="loading-spinner"></div>
+        <div>Loading standings...</div>
+      </div>
+    </div>
+
+    <div class="rules-list">
+      <p>* Picks due before 1st tee time of 1st round</p>
+      <p>** Playoffs: top 3 from each division + 1 wildcard per conference (14 total teams)</p>
+      <p>*** 5 or more missed picks = automatically out of playoffs and year-end payouts</p>
+    </div>
+  </main>
+
+  <footer>2026 Jersey Shore Fantasy Golf League</footer>
+
+  <script src="js/app.js"></script>
+  <script>
+    async function loadStandings() {
+      try {
+        const data = await apiFetch('/api/standings');
+        renderStandings(data);
+      } catch (err) {
+        console.error(err);
+        showError('standings-container', 'Unable to load standings. Please try again later.');
+      }
+    }
+
+    function renderStandings(conferences) {
+      const container = document.getElementById('standings-container');
+      let html = '';
+
+      for (const [confName, divisions] of Object.entries(conferences)) {
+        html += `<div class="conference">`;
+        html += `<h2 class="conference-title">${confName}</h2>`;
+        html += `<div class="divisions-grid">`;
+
+        for (const [divName, players] of Object.entries(divisions)) {
+          const playoffCutoff = 3;
+          html += `<div class="division-card">`;
+          html += `<div class="division-header">
+            <span>${divName}</span>
+            <span class="player-count">${players.length} players</span>
+          </div>`;
+          html += `<table class="standings-table">`;
+          html += `<thead><tr><th>#</th><th>Player</th><th>Avg Score</th><th>Earnings</th></tr></thead>`;
+          html += `<tbody>`;
+
+          players.forEach((p, idx) => {
+            const rank = idx + 1;
+            const rankClass = rank === 1 ? 'rank-1' : '';
+            const playoffLine = rank === playoffCutoff ? 'playoff-line' : '';
+            const score = p.avg_score !== null ? p.avg_score.toFixed(1) : '-';
+            html += `<tr class="${playoffLine}">
+              <td class="${rankClass}">${rank}</td>
+              <td>${p.name}</td>
+              <td>${score}</td>
+              <td>${formatMoney(p.total_winnings)}</td>
+            </tr>`;
+          });
+
+          html += `</tbody></table></div>`;
+        }
+
+        html += `</div></div>`;
+      }
+
+      container.innerHTML = html;
+    }
+
+    loadStandings();
+  </script>
+</body>
+</html>

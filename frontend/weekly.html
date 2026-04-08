@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jersey Shore Fantasy Golf - Weekly Results</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="header-top">
+        <div class="logo">Jersey Shore <span>Fantasy Golf</span></div>
+        <div class="season-badge">2026 Season</div>
+      </div>
+      <nav>
+        <a href="/">Season Standings</a>
+        <a href="/weekly.html" class="active">Weekly Results</a>
+        <a href="/picks.html">Pick Your Team</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="page-title">Weekly Results</h1>
+    <p class="page-subtitle">Division winners and scores week by week</p>
+
+    <div id="week-pills" class="week-pills" style="margin-bottom: 1.5rem;"></div>
+    <div id="tournament-info"></div>
+    <div id="weekly-container">
+      <div class="loading">
+        <div class="loading-spinner"></div>
+        <div>Loading weekly results...</div>
+      </div>
+    </div>
+
+    <h2 class="page-title" style="margin-top: 3rem;">Full Season Schedule</h2>
+    <p class="page-subtitle">27 regular season weeks + 3 playoff weeks</p>
+    <div id="schedule-container">
+      <div class="loading">
+        <div class="loading-spinner"></div>
+        <div>Loading schedule...</div>
+      </div>
+    </div>
+  </main>
+
+  <footer>2026 Jersey Shore Fantasy Golf League</footer>
+
+  <script src="js/app.js"></script>
+  <script>
+    let tournaments = [];
+    let weeksWithResults = [];
+    let selectedWeek = null;
+
+    async function loadWeeklyData() {
+      try {
+        const [tourneys, weeks] = await Promise.all([
+          apiFetch('/api/tournaments'),
+          apiFetch('/api/weekly')
+        ]);
+
+        tournaments = tourneys;
+        weeksWithResults = weeks.map(w => w.week_number);
+
+        renderWeekPills();
+        renderSchedule();
+
+        // Select the latest week with results
+        if (weeksWithResults.length > 0) {
+          selectWeek(weeksWithResults[weeksWithResults.length - 1]);
+        } else {
+          document.getElementById('weekly-container').innerHTML =
+            '<div class="no-results">No weekly results yet.</div>';
+        }
+      } catch (err) {
+        console.error(err);
+        showError('weekly-container', 'Unable to load weekly data.');
+        showError('schedule-container', 'Unable to load schedule.');
+      }
+    }
+
+    function renderWeekPills() {
+      const container = document.getElementById('week-pills');
+      let html = '';
+
+      for (const t of tournaments) {
+        const hasResults = weeksWithResults.includes(t.week_number);
+        const majorClass = t.is_major ? 'major' : '';
+        const dimmed = !hasResults ? 'style="opacity: 0.4;"' : '';
+
+        html += `<button class="week-pill ${majorClass}" data-week="${t.week_number}" ${dimmed}
+                   onclick="selectWeek(${t.week_number})">${t.week_number}</button>`;
+      }
+
+      container.innerHTML = html;
+    }
+
+    async function selectWeek(weekNum) {
+      selectedWeek = weekNum;
+
+      // Update pill active state
+      document.querySelectorAll('.week-pill').forEach(pill => {
+        pill.classList.toggle('active', parseInt(pill.dataset.week) === weekNum);
+      });
+
+      const tourney = tournaments.find(t => t.week_number === weekNum);
+      const infoEl = document.getElementById('tournament-info');
+      if (tourney) {
+        const majorBadge = tourney.is_major ? '<span class="major-badge">Major</span>' : '';
+        infoEl.innerHTML = `
+          <div class="tournament-info">
+            <div>
+              <div class="tournament-name">${tourney.name}${majorBadge}</div>
+              <div style="color: var(--gray-500); font-size: 0.9rem;">Week ${tourney.week_number}</div>
+            </div>
+            <div class="tournament-meta">
+              <span>${tourney.location || ''}</span>
+              <span>${tourney.start_date || ''}</span>
+            </div>
+          </div>
+        `;
+      }
+
+      // Fetch weekly results
+      const container = document.getElementById('weekly-container');
+      try {
+        const data = await apiFetch(`/api/weekly/${weekNum}`);
+        if (!data.winners || data.winners.length === 0) {
+          container.innerHTML = '<div class="no-results">No results yet for this week.</div>';
+          return;
+        }
+
+        let html = '<div class="weekly-winners-grid">';
+        for (const w of data.winners) {
+          html += `
+            <div class="winner-card">
+              <div class="division-name">${w.division}</div>
+              <div class="winner-name">${w.player_name}</div>
+              <div class="winner-details">
+                <span>Score: ${w.score !== null ? w.score : '-'}</span>
+                <span class="winnings">${formatMoney(w.winnings)}</span>
+              </div>
+            </div>
+          `;
+        }
+        html += '</div>';
+        container.innerHTML = html;
+      } catch (err) {
+        container.innerHTML = '<div class="no-results">No results yet for this week.</div>';
+      }
+    }
+
+    function renderSchedule() {
+      const container = document.getElementById('schedule-container');
+      const today = new Date();
+
+      let html = '<table class="schedule-table">';
+      html += '<thead><tr><th>Week</th><th>Tournament</th><th>Location</th><th>Date</th></tr></thead>';
+      html += '<tbody>';
+
+      for (const t of tournaments) {
+        const majorBadge = t.is_major ? `<span class="major-badge">Major</span>` : '';
+        const majorClass = t.is_major ? 'major' : '';
+
+        let currentClass = '';
+        if (t.start_date) {
+          const parts = t.start_date.split('/');
+          if (parts.length === 3) {
+            const tDate = new Date(2000 + parseInt(parts[2]), parseInt(parts[0]) - 1, parseInt(parts[1]));
+            const diff = (tDate - today) / (1000 * 60 * 60 * 24);
+            if (diff >= -4 && diff <= 3) currentClass = 'current-week';
+          }
+        }
+
+        html += `<tr class="${majorClass} ${currentClass}" style="cursor: pointer;"
+                   onclick="selectWeek(${t.week_number}); window.scrollTo({top: 0, behavior: 'smooth'});">
+          <td>Week ${t.week_number}</td>
+          <td>${t.name}${majorBadge}</td>
+          <td>${t.location || ''}</td>
+          <td>${t.start_date || ''}</td>
+        </tr>`;
+      }
+
+      html += '</tbody></table>';
+      container.innerHTML = html;
+    }
+
+    loadWeeklyData();
+  </script>
+</body>
+</html>
