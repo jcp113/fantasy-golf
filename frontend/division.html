@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jersey Shore Fantasy Golf - Division Detail</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <style>
+    .division-nav {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+    }
+    .division-nav a {
+      padding: 0.5rem 1rem;
+      border-radius: var(--radius);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 0.9rem;
+      background: var(--gray-100);
+      color: var(--gray-700);
+      transition: all 0.2s;
+    }
+    .division-nav a:hover {
+      background: var(--green-100);
+      color: var(--green-800);
+    }
+    .division-nav a.active {
+      background: var(--green-700);
+      color: var(--white);
+    }
+    .week-section {
+      margin-bottom: 2rem;
+    }
+    .week-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: var(--green-800);
+      color: var(--white);
+      border-radius: var(--radius) var(--radius) 0 0;
+      cursor: pointer;
+      user-select: none;
+    }
+    .week-header:hover {
+      background: var(--green-700);
+    }
+    .week-header .week-title {
+      font-weight: 600;
+    }
+    .week-header .week-tourney {
+      font-size: 0.85rem;
+      opacity: 0.8;
+    }
+    .week-header .toggle-icon {
+      font-size: 1.2rem;
+      transition: transform 0.2s;
+    }
+    .week-header.collapsed .toggle-icon {
+      transform: rotate(-90deg);
+    }
+    .week-body {
+      background: var(--white);
+      border: 1px solid var(--gray-200);
+      border-top: none;
+      border-radius: 0 0 var(--radius) var(--radius);
+      overflow-x: auto;
+    }
+    .week-body.hidden {
+      display: none;
+    }
+    .picks-table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 700px;
+    }
+    .picks-table th {
+      text-align: left;
+      padding: 0.6rem 0.75rem;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-50);
+      border-bottom: 1px solid var(--gray-200);
+      white-space: nowrap;
+    }
+    .picks-table td {
+      padding: 0.5rem 0.75rem;
+      font-size: 0.85rem;
+      border-bottom: 1px solid var(--gray-100);
+      vertical-align: top;
+    }
+    .picks-table tr:last-child td {
+      border-bottom: none;
+    }
+    .picks-table tr:hover {
+      background: var(--green-50);
+    }
+    .picks-table tr.week-winner {
+      background: var(--gold-light);
+    }
+    .picks-table tr.week-winner:hover {
+      background: #fef3c7;
+    }
+    .pick-cell {
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+    }
+    .pick-golfer {
+      display: flex;
+      justify-content: space-between;
+      gap: 0.5rem;
+    }
+    .pick-golfer .golfer-name {
+      font-size: 0.83rem;
+    }
+    .pick-golfer .golfer-pos {
+      font-weight: 600;
+      font-size: 0.8rem;
+      color: var(--gray-500);
+      white-space: nowrap;
+    }
+    .pick-golfer .golfer-pos.winner {
+      color: var(--gold);
+    }
+    .pick-golfer .golfer-pos.mc {
+      color: #dc2626;
+    }
+    .no-picks {
+      color: var(--gray-400);
+      font-style: italic;
+      font-size: 0.83rem;
+    }
+    .score-cell {
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .bonus-badge {
+      display: inline-block;
+      font-size: 0.7rem;
+      background: var(--gold-light);
+      color: var(--gray-700);
+      padding: 0.1rem 0.3rem;
+      border-radius: 3px;
+      margin-left: 0.25rem;
+    }
+    .winnings-cell {
+      color: var(--green-700);
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="header-top">
+        <div class="logo">Jersey Shore <span>Fantasy Golf</span></div>
+        <div class="season-badge">2026 Season</div>
+      </div>
+      <nav>
+        <a href="/">Season Standings</a>
+        <a href="/weekly.html">Weekly Results</a>
+        <a href="/picks.html">Pick Your Team</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="page-title" id="division-title">Division Detail</h1>
+    <p class="page-subtitle" id="division-subtitle">Weekly picks and scores</p>
+
+    <div class="division-nav" id="division-nav"></div>
+
+    <div id="division-container">
+      <div class="loading">
+        <div class="loading-spinner"></div>
+        <div>Loading division data...</div>
+      </div>
+    </div>
+  </main>
+
+  <footer>2026 Jersey Shore Fantasy Golf League</footer>
+
+  <script src="js/app.js"></script>
+  <script>
+    let currentDivisionId = null;
+
+    async function init() {
+      // Get division ID from URL params
+      const params = new URLSearchParams(window.location.search);
+      currentDivisionId = parseInt(params.get('id')) || 1;
+
+      // Load division nav
+      try {
+        const divisions = await apiFetch('/api/divisions');
+        renderDivisionNav(divisions);
+        loadDivision(currentDivisionId);
+      } catch (err) {
+        console.error(err);
+        showError('division-container', 'Unable to load divisions.');
+      }
+    }
+
+    function renderDivisionNav(divisions) {
+      const nav = document.getElementById('division-nav');
+      let html = '';
+      for (const d of divisions) {
+        const active = d.id === currentDivisionId ? 'active' : '';
+        html += `<a href="/division.html?id=${d.id}" class="${active}">${d.name}</a>`;
+      }
+      nav.innerHTML = html;
+    }
+
+    async function loadDivision(divId) {
+      const container = document.getElementById('division-container');
+      container.innerHTML = '<div class="loading"><div class="loading-spinner"></div><div>Loading division data...</div></div>';
+
+      try {
+        const data = await apiFetch(`/api/division/${divId}`);
+        document.getElementById('division-title').textContent = data.division.name;
+        document.getElementById('division-subtitle').textContent =
+          `${data.division.conference} — ${data.player_count} players — weekly picks and scores`;
+        renderWeeks(data.weeks);
+      } catch (err) {
+        console.error(err);
+        showError('division-container', 'Unable to load division data.');
+      }
+    }
+
+    function renderWeeks(weeks) {
+      const container = document.getElementById('division-container');
+
+      if (weeks.length === 0) {
+        container.innerHTML = '<div class="no-results">No completed weeks yet.</div>';
+        return;
+      }
+
+      // Show most recent week first
+      const reversed = [...weeks].reverse();
+      let html = '';
+
+      reversed.forEach((week, idx) => {
+        const majorBadge = week.is_major ? ' <span class="major-badge">Major</span>' : '';
+        const collapsed = idx > 0 ? 'collapsed' : '';
+        const hidden = idx > 0 ? 'hidden' : '';
+
+        html += `<div class="week-section">`;
+        html += `<div class="week-header ${collapsed}" onclick="toggleWeek(this)">
+          <div>
+            <span class="week-title">Week ${week.week_number}${majorBadge}</span>
+            <span class="week-tourney"> — ${week.tournament_name}</span>
+          </div>
+          <span class="toggle-icon">&#9660;</span>
+        </div>`;
+        html += `<div class="week-body ${hidden}">`;
+        html += `<table class="picks-table">`;
+        html += `<thead><tr>
+          <th>Player</th>
+          <th>Pick 1</th>
+          <th>Pick 2</th>
+          <th>Pick 3</th>
+          <th>Pick 4</th>
+          <th>Alternate</th>
+          <th>Score</th>
+          <th>Winnings</th>
+        </tr></thead>`;
+        html += '<tbody>';
+
+        for (const p of week.players) {
+          const winnerClass = p.is_week_winner ? 'week-winner' : '';
+
+          html += `<tr class="${winnerClass}">`;
+          html += `<td style="font-weight:600; white-space:nowrap;">${p.player_name}</td>`;
+
+          if (p.picks && p.picks.length > 0) {
+            for (const g of p.picks) {
+              html += `<td>${formatGolfer(g)}</td>`;
+            }
+            html += `<td class="no-picks" style="font-style:normal; color:var(--gray-500);">${p.alternate || '—'}</td>`;
+          } else {
+            html += '<td class="no-picks" colspan="5">No picks submitted</td>';
+          }
+
+          // Score
+          html += '<td class="score-cell">';
+          if (p.final_score !== null) {
+            html += p.final_score.toFixed(2);
+            if (p.winner_bonus > 0) {
+              html += `<span class="bonus-badge">-${p.winner_bonus}</span>`;
+            }
+          } else {
+            html += '—';
+          }
+          html += '</td>';
+
+          // Winnings
+          html += '<td class="winnings-cell">';
+          html += p.winnings > 0 ? formatMoney(p.winnings) : '';
+          html += '</td>';
+
+          html += '</tr>';
+        }
+
+        html += '</tbody></table></div></div>';
+      });
+
+      container.innerHTML = html;
+    }
+
+    function formatGolfer(g) {
+      if (!g) return '<span class="no-picks">—</span>';
+
+      let posText = '';
+      let posClass = 'golfer-pos';
+
+      if (g.is_winner) {
+        posText = '1st';
+        posClass += ' winner';
+      } else if (g.missed_cut) {
+        posText = 'MC';
+        posClass += ' mc';
+      } else if (g.withdrawn) {
+        posText = 'WD';
+        posClass += ' mc';
+      } else if (g.not_found) {
+        posText = 'N/A';
+        posClass += ' mc';
+      } else if (g.position) {
+        posText = ordinal(g.position);
+      } else {
+        posText = '—';
+      }
+
+      return `<div class="pick-golfer">
+        <span class="golfer-name">${g.name}</span>
+        <span class="${posClass}">${posText}</span>
+      </div>`;
+    }
+
+    function ordinal(n) {
+      const s = ['th', 'st', 'nd', 'rd'];
+      const v = n % 100;
+      return n + (s[(v - 20) % 10] || s[v] || s[0]);
+    }
+
+    function toggleWeek(header) {
+      header.classList.toggle('collapsed');
+      header.nextElementSibling.classList.toggle('hidden');
+    }
+
+    init();
+  </script>
+</body>
+</html>

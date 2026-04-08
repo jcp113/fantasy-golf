@@ -160,11 +160,12 @@ def api_standings():
     for row in standings:
         conf = row['conference']
         div = row['division']
+        div_id = row['division_id']
         if conf not in result:
             result[conf] = {}
         if div not in result[conf]:
-            result[conf][div] = []
-        result[conf][div].append({
+            result[conf][div] = {'division_id': div_id, 'players': []}
+        result[conf][div]['players'].append({
             'id': row['id'],
             'name': row['name'],
             'avg_score': float(row['avg_score']) if row['avg_score'] is not None else None,
@@ -242,6 +243,98 @@ def api_weekly_all():
     ''').fetchall()
     db.close()
     return jsonify([dict(w) for w in weeks])
+
+
+# ── API: Division Detail ────────────────────────────────────────────────────
+
+@app.route('/api/division/<int:division_id>')
+def api_division_detail(division_id):
+    """Get full weekly breakdown for a division: each player's picks, scores per week."""
+    db = get_db()
+
+    div = db.execute('SELECT d.*, c.name as conference FROM divisions d JOIN conferences c ON d.conference_id = c.id WHERE d.id = ?',
+                      (division_id,)).fetchone()
+    if not div:
+        db.close()
+        return jsonify({'error': 'Division not found'}), 404
+
+    players = db.execute(
+        'SELECT id, name FROM players WHERE division_id = ? AND active = 1 ORDER BY name',
+        (division_id,)
+    ).fetchall()
+
+    completed_tourneys = db.execute(
+        'SELECT * FROM tournaments WHERE completed = 1 ORDER BY week_number'
+    ).fetchall()
+
+    weeks = []
+    for t in completed_tourneys:
+        week_data = {
+            'week_number': t['week_number'],
+            'tournament_name': t['name'],
+            'is_major': t['is_major'],
+            'players': []
+        }
+
+        for p in players:
+            # Get picks
+            pick = db.execute(
+                'SELECT pick1, pick2, pick3, pick4, alternate FROM picks WHERE player_id = ? AND tournament_id = ?',
+                (p['id'], t['id'])
+            ).fetchone()
+
+            # Get score
+            score = db.execute(
+                'SELECT raw_score, winner_bonus, final_score FROM weekly_scores WHERE player_id = ? AND tournament_id = ?',
+                (p['id'], t['id'])
+            ).fetchone()
+
+            # Get individual golfer finish positions if picks exist
+            golfer_positions = []
+            if pick:
+                for gname in [pick['pick1'], pick['pick2'], pick['pick3'], pick['pick4']]:
+                    if gname:
+                        gr = db.execute(
+                            'SELECT finish_position, missed_cut, withdrawn, is_winner FROM golfer_results WHERE tournament_id = ? AND golfer_name = ?',
+                            (t['id'], gname)
+                        ).fetchone()
+                        golfer_positions.append({
+                            'name': gname,
+                            'position': gr['finish_position'] if gr and not gr['missed_cut'] and not gr['withdrawn'] else None,
+                            'missed_cut': bool(gr['missed_cut']) if gr else False,
+                            'withdrawn': bool(gr['withdrawn']) if gr else False,
+                            'is_winner': bool(gr['is_winner']) if gr else False,
+                            'not_found': gr is None,
+                        })
+
+            # Check if this player won their division this week
+            winner = db.execute(
+                'SELECT winnings FROM weekly_winners WHERE tournament_id = ? AND division_id = ? AND player_id = ?',
+                (t['id'], division_id, p['id'])
+            ).fetchone()
+
+            player_week = {
+                'player_id': p['id'],
+                'player_name': p['name'],
+                'picks': golfer_positions if pick else None,
+                'alternate': pick['alternate'] if pick else None,
+                'final_score': float(score['final_score']) if score else None,
+                'winner_bonus': float(score['winner_bonus']) if score and score['winner_bonus'] else 0,
+                'is_week_winner': winner is not None,
+                'winnings': float(winner['winnings']) if winner else 0,
+            }
+            week_data['players'].append(player_week)
+
+        # Sort players by score (best first), no-picks last
+        week_data['players'].sort(key=lambda x: (x['final_score'] is None, x['final_score'] or 999))
+        weeks.append(week_data)
+
+    db.close()
+    return jsonify({
+        'division': {'id': div['id'], 'name': div['name'], 'conference': div['conference']},
+        'weeks': weeks,
+        'player_count': len(players),
+    })
 
 
 # ── API: Picks ──────────────────────────────────────────────────────────────

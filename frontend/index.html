@@ -82,11 +82,13 @@
         html += `<h2 class="conference-title">${confName}</h2>`;
         html += `<div class="divisions-grid">`;
 
-        for (const [divName, players] of Object.entries(divisions)) {
+        for (const [divName, divData] of Object.entries(divisions)) {
+          const players = divData.players;
+          const divId = divData.division_id;
           const playoffCutoff = 3;
           html += `<div class="division-card">`;
           html += `<div class="division-header">
-            <span>${divName}</span>
+            <a href="/division.html?id=${divId}" style="color:inherit;text-decoration:none;">${divName} &#8594;</a>
             <span class="player-count">${players.length} players</span>
           </div>`;
           html += `<table class="standings-table">`;
